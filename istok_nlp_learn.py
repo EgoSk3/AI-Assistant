@@ -6,7 +6,6 @@ from spacy.util import minibatch, compounding
 import random
 from pathlib import Path
 
-
 class IIoTAnalyzer:
     def __init__(self, model_path: Optional[str] = None):
         # Инициализация NLP модели
@@ -43,7 +42,7 @@ class IIoTAnalyzer:
             self.ner = self.nlp.get_pipe("ner")
 
     def train_ner_model(self, train_data: List[tuple], output_dir: str = "iiot_ner_model", n_iter: int = 30):
-        """Обучение NER модели"""
+        """Обучение NER модели с прогресс-баром"""
         # Добавление меток сущностей
         for _, annotations in train_data:
             for ent in annotations.get("entities", []):
@@ -56,17 +55,19 @@ class IIoTAnalyzer:
             example = Example.from_dict(doc, annots)
             examples.append(example)
 
-        # Обучение
-        print("🔄 Начало обучения NER модели...")
+        # Обучение с выводом прогресса
+        print(f"🔄 Обучение модели на {len(train_data)} примерах...")
         optimizer = self.nlp.begin_training()
 
         for itn in range(n_iter):
             random.shuffle(examples)
             losses = {}
             batches = minibatch(examples, size=compounding(2.0, 16.0, 1.1))
+
             for batch in batches:
                 self.nlp.update(batch, drop=0.3, losses=losses, sgd=optimizer)
-            print(f"⏳ Итерация {itn + 1}, Потери: {losses.get('ner', 0):.3f}")
+
+            print(f"⏳ Итерация {itn + 1}/{n_iter} | Потери: {losses['ner']:.3f}")
 
         # Сохранение модели
         self.nlp.to_disk(output_dir)
@@ -206,14 +207,14 @@ def main():
     print("🚀 Комбинированная система анализа для IIoT.Istok")
     print("=" * 60)
 
-    # Инициализация анализатора
-    analyzer = IIoTAnalyzer()
-
-    # Обучение модели (если нужно)
+    # Инициализация с автоматическим обучением
     if not Path("iiot_ner_model").exists():
-        print("\n🛠 Обучение NER модели на тестовых данных...")
+        print("\n🔎 Обученная модель не найдена")
+        analyzer = IIoTAnalyzer()
         analyzer.train_ner_model(TRAIN_DATA)
-        analyzer = IIoTAnalyzer("iiot_ner_model")  # Перезагружаем обученную модель
+    else:
+        print("\n🔎 Загружаем существующую модель")
+        analyzer = IIoTAnalyzer("iiot_ner_model")
 
     # Интерактивный режим
     while True:
@@ -224,12 +225,8 @@ def main():
             break
 
         if user_input:
-            # Анализ текста
             analysis = analyzer.analyze_text(user_input)
             analyzer.pretty_print_analysis(analysis)
-
-            # Здесь можно добавить логику для работы с API IIoT.Istok
-            # Например, получение данных по equipment_id и дате
 
 
 if __name__ == "__main__":
